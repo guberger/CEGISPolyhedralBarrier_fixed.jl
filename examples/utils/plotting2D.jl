@@ -1,6 +1,6 @@
 include("geometry.jl")
 
-function _to_vector_ineq(halfspaces::Vector{Halfspace})
+function _to_vector_ineq_halfspace(halfspaces)
     A = zeros(length(halfspaces), 2)
     b = zeros(length(halfspaces))
     for (i, h) in enumerate(halfspaces)
@@ -10,7 +10,7 @@ function _to_vector_ineq(halfspaces::Vector{Halfspace})
     return A, b
 end
 
-function _to_vector_ineq(afs::Vector{AffForm})
+function _to_vector_ineq_affform(afs)
     A = zeros(length(afs), 2)
     b = zeros(length(afs))
     for (i, af) in enumerate(afs)
@@ -21,18 +21,16 @@ function _to_vector_ineq(afs::Vector{AffForm})
 end
 
 function plot_hrep!(
-        ax, halfspaces::Vector{Halfspace}, lims;        
-        fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, halfspaces, lims; fc="blue", fa=0.5, ec="blue", ew=2.0
     )
-    A, b = _to_vector_ineq(halfspaces)
+    A, b = _to_vector_ineq_halfspace(halfspaces)
     _plot_hrep!(ax, A, b, lims, fc, fa, ec, ew)
 end
 
 function plot_level!(
-        ax, afs::Vector{AffForm}, lims;
-        fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, afs, lims; fc="blue", fa=0.5, ec="blue", ew=2.0
     )
-    A, b = _to_vector_ineq(afs)
+    A, b = _to_vector_ineq_affform(afs)
     _plot_hrep!(ax, A, b, lims, fc, fa, ec, ew)
 end
 
@@ -51,7 +49,7 @@ function _plot_hrep!(ax, A, b, lims, fc, fa, ec, ew)
     ax.add_collection(polylist)
 end
 
-function _to_matrix_points(points::Vector{Point})
+function _to_matrix_points(points)
     P = zeros(length(points), 2)
     for (i, point) in enumerate(points)
         P[i, 1], P[i, 2] = (point...,)
@@ -60,7 +58,7 @@ function _to_matrix_points(points::Vector{Point})
 end
 
 function plot_vrep!(
-        ax, points::Vector{Point}; fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, points; fc="blue", fa=0.5, ec="blue", ew=2.0
     )
     isempty(points) && return
     P = _to_matrix_points(points)

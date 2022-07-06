@@ -7,16 +7,11 @@ using PyPlot
 
 include("../../src/CEGISPolyhedralBarrier.jl")
 CPB = CEGISPolyhedralBarrier
-Halfspace = CPB.Halfspace
-AffForm = CPB.AffForm
-Point = CPB.Point
 Polyhedron = CPB.Polyhedron
 PolyFunc = CPB.PolyFunc
 System = CPB.System
 InitialSet = CPB.InitialSet
 UnsafeSet = CPB.UnsafeSet
-State = CPB.State
-Region = CPB.Region
 
 include("../utils/plotting2D.jl")
 
@@ -24,10 +19,6 @@ const GUROBI_ENV = Gurobi.Env()
 solver() = Model(optimizer_with_attributes(
     () -> Gurobi.Optimizer(GUROBI_ENV), "OutputFlag"=>false
 ))
-
-## Parameters
-nvar = 2
-nloc = 2
 
 box = Polyhedron()
 CPB.add_halfspace!(box, [-1, 0], -2)
@@ -49,21 +40,19 @@ A = Matrix{Bool}(I, 2, 2)
 b = [0.0, 0.5]
 CPB.add_piece!(sys, domain ∩ box, 2, A, b, 1)
 
-iset = InitialSet()
+iset = InitialSet{2}()
 init_points = ([-1, -1], [-1, 1], [1, -1], [1, 1])
 for point in init_points
-    CPB.add_state!(iset, 1, point)
+    CPB.add_point!(iset, 1, point)
 end
 
-uset = UnsafeSet()
+uset = UnsafeSet{2}()
 udom = Polyhedron()
 CPB.add_halfspace!(udom, [-1, 0], -2)
 CPB.add_halfspace!(udom, [1, 0], 1)
 CPB.add_halfspace!(udom, [0, -1], 1)
 CPB.add_halfspace!(udom, [0, 1], -2)
-CPB.add_region!(uset, 2, udom)
-
-## Plotting
+CPB.add_domain!(uset, 2, udom)
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -85,19 +74,19 @@ for ax in ax_
     ax.plot(0, 0, marker="x", ms=10, c="black", mew=2.5)
 end
 
-for state in iset.states
-    plot_point!(ax_[state.loc], state.point, mc="gold")
-end
-
-for loc = 1:nloc
-    points = [state.point for state in iset.states if state.loc == loc]
+for (loc, points) in enumerate(iset.points_list)
+    for point in points
+        plot_point!(ax_[loc], point, mc="gold")
+    end
     plot_vrep!(ax_[loc], points, fc="yellow", ec="yellow")
 end
 
-for region in uset.regions
-    plot_hrep!(
-        ax_[region.loc], region.domain.halfspaces, nothing, fc="red", ec="red"
-    )
+for (loc, domains) in enumerate(uset.domains_list)
+    for domain in domains
+        plot_hrep!(
+            ax_[loc], domain.halfspaces, nothing, fc="red", ec="red"
+        )
+    end
 end
 
 for piece in sys.pieces
@@ -107,16 +96,13 @@ for piece in sys.pieces
 end
 
 ## Learner
-lear = CPB.Learner(nvar, nloc, sys, iset, uset, 0, 0)
-CPB.set_tol!(lear, :rad, 1e-4)
-CPB.set_tol!(lear, :bigM, 1e3)
-
-status, mpf = CPB.learn_lyapunov!(lear, 1000, solver, solver)
+lear = CPB.Learner{2}((1, 1), sys, iset, uset)
+status, mpf, iter = CPB.learn_lyapunov!(lear, 1000, solver, solver)
 
 display(status)
 
-for loc = 1:nloc
-    plot_level!(ax_[loc], mpf.pfs[loc].afs, [(-10, -10), (10, 10)])
+for (loc, pf) in enumerate(mpf.pfs)
+    plot_level!(ax_[loc], pf.afs, [(-10, -10), (10, 10)])
 end
 
 end # module

@@ -83,7 +83,7 @@ lear = CPB.Learner{1}((0, 1), sys, iset, uset)
 status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver)
 
 @testset "learn lyapunov disc: rad too small" begin
-    @test status == CPB.RADIUS_TOO_SMALL
+    @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((1, 1), sys, iset, uset)
@@ -112,7 +112,7 @@ lear = CPB.Learner{1}((1, 1), sys, iset, uset)
 status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver)
 
 @testset "learn lyapunov disc: rad too small" begin
-    @test status == CPB.RADIUS_TOO_SMALL
+    @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((2, 1), sys, iset, uset)

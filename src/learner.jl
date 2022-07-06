@@ -111,7 +111,7 @@ function learn_lyapunov!(
         end
         if r < lear.tols[:rad]
             do_print && println(string("Radius too small: ", r))
-            isempty(gen_queue) && return RADIUS_TOO_SMALL, mpf, iter
+            isempty(gen_queue) && return BARRIER_INFEASIBLE, mpf, iter
             continue
         end
 
@@ -120,6 +120,7 @@ function learn_lyapunov!(
         x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
         if obj > lear.tols[:pos]
             do_print && println("CE found: ", x, ", ", loc, ", ", obj)
+            lear.nafs[loc] == 0 && return BARRIER_INFEASIBLE, mpf, iter
             for i = 1:lear.nafs[loc]
                 pos_evids = copy(gen.pos_evids)
                 lie_evids = gen.lie_evids
@@ -156,4 +157,5 @@ function learn_lyapunov!(
         println("Valid CLF: terminated")
         return BARRIER_FOUND, mpf, iter
     end
+    @assert false
 end

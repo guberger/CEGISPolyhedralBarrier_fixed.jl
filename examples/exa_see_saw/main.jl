@@ -98,18 +98,19 @@ end
 
 for piece in sys.pieces
     plot_hrep!(
-        ax_[piece.loc1], piece.domain.halfspaces, nothing, fa=0.1, ec="blue"
+        ax_[piece.loc1], piece.domain.halfspaces, nothing, fa=0.1
     )
 end
 
 ## Learner
 lear = CPB.Learner{2}((2,), sys, iset, uset)
+CPB.set_tol!(lear, :dom, 1e-8)
 status, mpf, iter = CPB.learn_lyapunov!(lear, 1000, solver, solver)
 
 display(status)
 
 for (loc, pf) in enumerate(mpf.pfs)
-    plot_level!(ax_[loc], pf.afs, [(-21, -21), (21, 21)])
+    plot_level!(ax_[loc], pf.afs, [(-21, -21), (21, 21)], fa=0.1, ew=0.5)
 end
 
 end # module

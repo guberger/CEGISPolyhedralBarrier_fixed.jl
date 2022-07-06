@@ -21,14 +21,14 @@ function _to_vector_ineq_affform(afs)
 end
 
 function plot_hrep!(
-        ax, halfspaces, lims; fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, halfspaces, lims; fc="blue", fa=0.5, ec="blue", ew=1.0
     )
     A, b = _to_vector_ineq_halfspace(halfspaces)
     _plot_hrep!(ax, A, b, lims, fc, fa, ec, ew)
 end
 
 function plot_level!(
-        ax, afs, lims; fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, afs, lims; fc="green", fa=0.5, ec="green", ew=1.0
     )
     A, b = _to_vector_ineq_affform(afs)
     _plot_hrep!(ax, A, b, lims, fc, fa, ec, ew)
@@ -58,7 +58,7 @@ function _to_matrix_points(points)
 end
 
 function plot_vrep!(
-        ax, points; fc="blue", fa=0.5, ec="blue", ew=2.0
+        ax, points; fc="blue", fa=0.5, ec="blue", ew=1.0
     )
     isempty(points) && return
     P = _to_matrix_points(points)

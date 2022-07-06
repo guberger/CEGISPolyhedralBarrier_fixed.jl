@@ -29,30 +29,43 @@ CPB.add_halfspace!(box, [0, 1], -2)
 sys = System()
 
 domain = Polyhedron()
-CPB.add_halfspace!(domain, [0, -1], 0.5)
-A = [0.5 0.0; 0.0 0.5]
+CPB.add_halfspace!(domain, [-1, 0], 0.05)
+CPB.add_halfspace!(domain, [0, 1], 0.05)
+A = [-0.999 0; -0.139 0.341]
 b = [0, 0]
-CPB.add_piece!(sys, domain ∩ box, 1, A, b, 2)
+CPB.add_piece!(sys, domain ∩ box, 1, A, b, 1)
 
 domain = Polyhedron()
-CPB.add_halfspace!(domain, [1, 0], 0)
-A = Matrix{Bool}(I, 2, 2)
-b = [0.0, 0.5]
-CPB.add_piece!(sys, domain ∩ box, 2, A, b, 1)
+CPB.add_halfspace!(domain, [-1, 0], 0.05)
+CPB.add_halfspace!(domain, [0, -1], 0.05)
+A = [0.436 0.323; 0.388 -0.049]
+b = [0, 0]
+CPB.add_piece!(sys, domain ∩ box, 1, A, b, 1)
 
-iset = InitialSet{2}()
-init_points = ([-1, -1], [-1, 1], [1, -1], [1, 1])
+domain = Polyhedron()
+CPB.add_halfspace!(domain, [1, 0], 0.05)
+CPB.add_halfspace!(domain, [0, 1], 0.05)
+A = [-0.457 0.215; 0.491 0.49]
+b = [0, 0]
+CPB.add_piece!(sys, domain ∩ box, 1, A, b, 1)
+
+domain = Polyhedron()
+CPB.add_halfspace!(domain, [1, 0], 0.05)
+CPB.add_halfspace!(domain, [0, -1], 0.05)
+A = [-0.022 0.344; 0.458 0.327141]
+b = [0, 0]
+CPB.add_piece!(sys, domain ∩ box, 1, A, b, 1)
+
+iset = InitialSet{1}()
+init_points = ([-0.5, -0.5],)
 for point in init_points
     CPB.add_point!(iset, 1, point)
 end
 
-uset = UnsafeSet{2}()
+uset = UnsafeSet{1}()
 udom = Polyhedron()
-CPB.add_halfspace!(udom, [-1, 0], -2)
-CPB.add_halfspace!(udom, [1, 0], 1)
-CPB.add_halfspace!(udom, [0, -1], 1)
-CPB.add_halfspace!(udom, [0, 1], -2)
-CPB.add_domain!(uset, 2, udom)
+CPB.add_halfspace!(udom, [-1, 0], 1.8)
+CPB.add_domain!(uset, 1, udom ∩ box)
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -96,9 +109,10 @@ for piece in sys.pieces
 end
 
 ## Learner
-lear = CPB.Learner{2}((1, 1), sys, iset, uset)
+lear = CPB.Learner{2}((3,), sys, iset, uset)
+CPB.set_tol!(lear, :rad, 1e-1)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 1000, solver, solver)
+status, mpf, iter = CPB.learn_lyapunov!(lear, Inf, solver, solver)
 
 display(status)
 

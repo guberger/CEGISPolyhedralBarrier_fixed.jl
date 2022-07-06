@@ -12,6 +12,8 @@ Polyhedron = CPB.Polyhedron
 System = CPB.System
 InitialSet = CPB.InitialSet
 UnsafeSet = CPB.UnsafeSet
+PolyFunc = CPB.PolyFunc
+_norm(pf::PolyFunc) = maximum(lf -> max(norm(lf.lin, Inf), lf.off), pf.afs)
 
 function HiGHS._check_ret(ret::Cint) 
     if ret != Cint(0) && ret != Cint(1)
@@ -58,14 +60,15 @@ CPB.set_param!(lear, :xmax, 1e2)
 end
 
 lear = CPB.Learner{1}((10, 10), sys, iset, uset)
-status, = CPB.learn_lyapunov!(lear, 1, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(lear, 1, solver, solver)
 
 @testset "learn lyapunov disc: max iter" begin
     @test status == CPB.MAX_ITER_REACHED
+    @test length(gen.pos_evids) + length(gen.lie_evids) == 0
 end
 
 lear = CPB.Learner{1}((0, 1), sys, iset, uset)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver, PR=2)
+status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver, PR=2)
 
 @testset "learn lyapunov disc: found" begin
     @test status == CPB.BARRIER_FOUND
@@ -80,14 +83,14 @@ b = [0]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
 lear = CPB.Learner{1}((0, 1), sys, iset, uset)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver)
 
 @testset "learn lyapunov disc: rad too small" begin
     @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((1, 1), sys, iset, uset)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver)
 
 @testset "learn lyapunov disc: found" begin
     @test status == CPB.BARRIER_FOUND
@@ -109,14 +112,14 @@ b = [-1]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
 lear = CPB.Learner{1}((1, 1), sys, iset, uset)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
+status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
 
 @testset "learn lyapunov disc: rad too small" begin
     @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((2, 1), sys, iset, uset)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
+status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
 
 @testset "learn lyapunov disc: found" begin
     @test status == CPB.BARRIER_FOUND

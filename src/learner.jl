@@ -78,6 +78,7 @@ end
 function learn_lyapunov!(
         lear::Learner, iter_max, solver_gen, solver_verif; PR="full"
     )
+    @assert iter_max ≥ 1
     verif = Verifier()
     _add_predicates_pos!(verif, nvar(lear), lear.uset)
     _add_predicates_lie!(verif, nvar(lear), lear.sys)
@@ -90,6 +91,12 @@ function learn_lyapunov!(
     end
     neg_evids = gen.neg_evids
     gen_queue = PriorityQueue((gen, 0, -Inf)=>-Inf)
+    mpf = MultiPolyFunc(length(lear.nafs))
+    for (loc, naf) in enumerate(lear.nafs)
+        for i = 1:naf
+            add_af!(mpf, loc, zeros(nvar(lear)), 0.0)
+        end
+    end
 
     iter = 0
     xmax, rmax = lear.params[:xmax], lear.params[:rmax]
@@ -101,20 +108,19 @@ function learn_lyapunov!(
     _pr_none = PR == "none"
     _pr_part(PR, iter) =
         PR == "full" || (PR !="none" && mod(iter - 1, Int(PR)) == 0)
-    mpf = MultiPolyFunc(0)
 
     while true
         if isempty(gen_queue)
             !_pr_none && println("Infeasible: queue empty")
-            return BARRIER_INFEASIBLE, mpf, iter
+            return BARRIER_INFEASIBLE, mpf, gen
         end
 
         iter += 1
-        _pr_part(PR, iter) && println("Iter: ", iter)
         if iter > iter_max
             !_pr_none && println("Max iter exceeded: ", iter)
-            return MAX_ITER_REACHED, MultiPolyFunc(0), iter
+            return MAX_ITER_REACHED, mpf, gen
         end
+        _pr_part(PR, iter) && println("Iter: ", iter)
 
         # Generator
         gen, depth, δ = dequeue!(gen_queue)
@@ -168,7 +174,7 @@ function learn_lyapunov!(
         
         !_pr_none && println("No CE found")
         !_pr_none && println("Valid CLF: terminated")
-        return BARRIER_FOUND, mpf, iter
+        return BARRIER_FOUND, mpf, gen
     end
     @assert false
 end

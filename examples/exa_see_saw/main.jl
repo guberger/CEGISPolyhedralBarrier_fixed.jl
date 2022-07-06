@@ -105,12 +105,20 @@ end
 ## Learner
 lear = CPB.Learner{2}((2,), sys, iset, uset)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, iter = CPB.learn_lyapunov!(lear, 1000, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(lear, 1000, solver, solver)
 
 display(status)
 
 for (loc, pf) in enumerate(mpf.pfs)
     plot_level!(ax_[loc], pf.afs, [(-21, -21), (21, 21)], fa=0.1, ew=0.5)
+end
+
+for evid in gen.pos_evids
+    plot_point!(ax_[evid.loc], evid.point, mc="orange")
+end
+
+for evid in gen.lie_evids
+    plot_point!(ax_[evid.loc], evid.point, mc="purple")
 end
 
 end # module

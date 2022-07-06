@@ -89,28 +89,30 @@ function learn_lyapunov!(
         end
     end
     neg_evids = gen.neg_evids
-    gen_queue = [gen]
+    gen_queue = [(gen, 0)]
 
     iter = 0
     xmax, rmax = lear.params[:xmax], lear.params[:rmax]
     tol_dom = lear.tols[:dom]
+    gens_next = Tuple{typeof(gen),Float64}[]
+    dmax = 0
 
     while !isempty(gen_queue)
         iter += 1
         do_print && println("Iter: ", iter)
         if iter > iter_max
-            println(string("Max iter exceeded: ", iter))
+            println("Max iter exceeded: ", iter)
             return MAX_ITER_REACHED, MultiPolyFunc(length(lear.nafs)), iter
         end
 
         # Generator
-        gen = pop!(gen_queue)
+        gen, depth = pop!(gen_queue)
+        dmax = max(dmax, depth)
+        do_print && println("|--- depth: ", depth, " (max: ", dmax, ")")
         mpf, r = compute_mpf_robust(gen, solver_gen)
-        if do_print
-            println("|--- radius: ", r)
-        end
+        do_print && println("|--- radius: ", r)
         if r < lear.tols[:rad]
-            do_print && println(string("Radius too small: ", r))
+            do_print && println("Radius too small: ", r)
             isempty(gen_queue) && return BARRIER_INFEASIBLE, mpf, iter
             continue
         end
@@ -118,6 +120,7 @@ function learn_lyapunov!(
         # Verifier
         do_print && print("|--- Verify pos... ")
         x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
+        empty!(gens_next)
         if obj > lear.tols[:pos]
             do_print && println("CE found: ", x, ", ", loc, ", ", obj)
             lear.nafs[loc] == 0 && return BARRIER_INFEASIBLE, mpf, iter
@@ -126,7 +129,11 @@ function learn_lyapunov!(
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                push!(gen_queue, gen2)
+                push!(gens_next, (gen2, _eval(mpf.pfs[loc].afs[i], x)))
+            end
+            sort!(gens_next, by=t->t[2])
+            for t in gens_next
+                push!(gen_queue, (t[1], depth + 1))
             end
             continue
         else
@@ -141,13 +148,17 @@ function learn_lyapunov!(
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                push!(gen_queue, gen2)
+                push!(gens_next, (gen2, _eval(mpf.pfs[loc].afs[i], x)))
+            end
+            sort!(gens_next, by=t->t[2])
+            for t in gens_next
+                push!(gen_queue, (t[1], depth + 1))
             end
             pos_evids = gen.pos_evids
             lie_evids = copy(gen.lie_evids)
             gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
             _add_evidences_lie!(gen2, lear.sys, loc, x, tol_dom)
-            push!(gen_queue, gen2)
+            push!(gen_queue, (gen2, depth + 1))
             continue
         else
             do_print && println("No CE found: ", obj)

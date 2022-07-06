@@ -120,7 +120,7 @@ udom = Polyhedron()
 CPB.add_halfspace!(udom, [1, -1], 11)
 CPB.add_domain!(uset, 1, udom ∩ box)
 CPB.add_domain!(uset, 2, udom ∩ box)
-CPB.add_domain!(uset, 3, udom ∩ box)
+# CPB.add_domain!(uset, 3, udom ∩ box)
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -161,10 +161,10 @@ for piece in sys.pieces
 end
 
 ## Learner
-lear = CPB.Learner{2}((2, 1, 2), sys, iset, uset)
+lear = CPB.Learner{2}((2, 1, 1), sys, iset, uset)
 CPB.set_tol!(lear, :rad, 1e-3)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, iter = CPB.learn_lyapunov!(lear, Inf, solver, solver)
+status, mpf, iter = CPB.learn_lyapunov!(lear, Inf, solver, solver, PR=100)
 
 display(status)
 

@@ -68,12 +68,9 @@ CPB.add_halfspace!(udom, [-1, 0], 1.8)
 CPB.add_domain!(uset, 1, udom ∩ box)
 
 # Illustration
-fig = figure(0, figsize=(15, 8))
-ax_ = fig.subplots(
-    nrows=1, ncols=2,
-    gridspec_kw=Dict("wspace"=>0.2, "hspace"=>0.1),
-    subplot_kw=Dict("aspect"=>"equal")
-)
+fig = figure(0, figsize=(10, 8))
+ax = fig.add_subplot(aspect="equal")
+ax_ = (ax,)
 
 xlims = (-2.2, 2.2)
 ylims = (-2.2, 2.2)
@@ -112,7 +109,7 @@ end
 lear = CPB.Learner{2}((3,), sys, iset, uset)
 CPB.set_tol!(lear, :rad, 1e-1)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, iter = CPB.learn_lyapunov!(lear, Inf, solver, solver)
+status, mpf, iter = CPB.learn_lyapunov!(lear, Inf, solver, solver, PR=50)
 
 display(status)
 

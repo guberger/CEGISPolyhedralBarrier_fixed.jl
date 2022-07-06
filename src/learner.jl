@@ -76,7 +76,7 @@ function _add_predicates_lie!(verif, N, sys)
 end
 
 function learn_lyapunov!(
-        lear::Learner, iter_max, solver_gen, solver_verif; do_print=true
+        lear::Learner, iter_max, solver_gen, solver_verif; PR="full"
     )
     verif = Verifier()
     _add_predicates_pos!(verif, nvar(lear), lear.uset)
@@ -89,83 +89,85 @@ function learn_lyapunov!(
         end
     end
     neg_evids = gen.neg_evids
-    gen_queue = [(gen, 0)]
+    gen_queue = PriorityQueue((gen, 0, -Inf)=>-Inf)
 
     iter = 0
     xmax, rmax = lear.params[:xmax], lear.params[:rmax]
     tol_dom = lear.tols[:dom]
-    gens_next = Tuple{typeof(gen),Float64}[]
-    dmax = 0
+    depth_max = 0
 
-    while !isempty(gen_queue)
+    # print rules
+    _pr_full = PR == "full"
+    _pr_none = PR == "none"
+    _pr_part(PR, iter) =
+        PR == "full" || (PR !="none" && mod(iter - 1, Int(PR)) == 0)
+    mpf = MultiPolyFunc(0)
+
+    while true
+        if isempty(gen_queue)
+            !_pr_none && println("Infeasible: queue empty")
+            return BARRIER_INFEASIBLE, mpf, iter
+        end
+
         iter += 1
-        do_print && println("Iter: ", iter)
+        _pr_part(PR, iter) && println("Iter: ", iter)
         if iter > iter_max
-            println("Max iter exceeded: ", iter)
-            return MAX_ITER_REACHED, MultiPolyFunc(length(lear.nafs)), iter
+            !_pr_none && println("Max iter exceeded: ", iter)
+            return MAX_ITER_REACHED, MultiPolyFunc(0), iter
         end
 
         # Generator
-        gen, depth = pop!(gen_queue)
-        dmax = max(dmax, depth)
-        do_print && println("|--- depth: ", depth, " (max: ", dmax, ")")
+        gen, depth, δ = dequeue!(gen_queue)
+        depth_max = max(depth_max, depth)
+        _pr_part(PR, iter) &&
+            println("|--- depth: ", depth_max, ", δ: ", δ)
         mpf, r = compute_mpf_robust(gen, solver_gen)
-        do_print && println("|--- radius: ", r)
+        _pr_full && println("|--- radius: ", r)
         if r < lear.tols[:rad]
-            do_print && println("Radius too small: ", r)
-            isempty(gen_queue) && return BARRIER_INFEASIBLE, mpf, iter
+            _pr_full && println("Radius too small: ", r)
             continue
         end
 
         # Verifier
-        do_print && print("|--- Verify pos... ")
+        _pr_full && print("|--- Verify pos... ")
         x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
-        empty!(gens_next)
+        δ = -r
         if obj > lear.tols[:pos]
-            do_print && println("CE found: ", x, ", ", loc, ", ", obj)
-            lear.nafs[loc] == 0 && return BARRIER_INFEASIBLE, mpf, iter
+            _pr_full && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
                 pos_evids = copy(gen.pos_evids)
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                push!(gens_next, (gen2, _eval(mpf.pfs[loc].afs[i], x)))
-            end
-            sort!(gens_next, by=t->t[2])
-            for t in gens_next
-                push!(gen_queue, (t[1], depth + 1))
+                enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
             end
             continue
         else
-            do_print && println("No CE found: ", obj)
+            _pr_full && println("No CE found: ", obj)
         end
-        do_print && print("|--- Verify lie... ")
+        _pr_full && print("|--- Verify lie... ")
         x, obj, loc = verify_lie(verif, mpf, xmax, rmax, solver_verif)
         if obj > lear.tols[:lie]
-            do_print && println("CE found: ", x, ", ", loc, ", ", obj)
+            _pr_full && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
                 pos_evids = copy(gen.pos_evids)
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                push!(gens_next, (gen2, _eval(mpf.pfs[loc].afs[i], x)))
-            end
-            sort!(gens_next, by=t->t[2])
-            for t in gens_next
-                push!(gen_queue, (t[1], depth + 1))
+                enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
             end
             pos_evids = gen.pos_evids
             lie_evids = copy(gen.lie_evids)
             gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
             _add_evidences_lie!(gen2, lear.sys, loc, x, tol_dom)
-            push!(gen_queue, (gen2, depth + 1))
+            enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
             continue
         else
-            do_print && println("No CE found: ", obj)
+            _pr_full && println("No CE found: ", obj)
         end
         
-        println("No CE found")
-        println("Valid CLF: terminated")
+        !_pr_none && println("No CE found")
+        !_pr_none && println("Valid CLF: terminated")
         return BARRIER_FOUND, mpf, iter
     end
     @assert false

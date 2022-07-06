@@ -1,6 +1,7 @@
 module CEGISPolyhedralBarrier
 
 using LinearAlgebra
+using DataStructures
 using StaticArrays
 using JuMP
 

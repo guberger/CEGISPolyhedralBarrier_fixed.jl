@@ -90,18 +90,14 @@ function learn_lyapunov!(
         end
     end
     neg_evids = gen.neg_evids
-    gen_queue = PriorityQueue((gen, 0, -Inf)=>-Inf)
-    mpf = MultiPolyFunc(length(lear.nafs))
-    for (loc, naf) in enumerate(lear.nafs)
-        for i = 1:naf
-            add_af!(mpf, loc, zeros(nvar(lear)), 0.0)
-        end
-    end
+    # gen_queue = PriorityQueue((gen, 0, -Inf)=>-Inf)
+    gen_queue = PriorityQueue((gen, 0, 0)=>0)
 
     iter = 0
     xmax, rmax = lear.params[:xmax], lear.params[:rmax]
     tol_dom = lear.tols[:dom]
     depth_max = 0
+    mpf = MultiPolyFunc(0)
 
     # print rules
     _pr_full = PR == "full"
@@ -137,7 +133,8 @@ function learn_lyapunov!(
         # Verifier
         _pr_full && print("|--- Verify pos... ")
         x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
-        δ = -r
+        # δ = -r
+        δ = depth + 1
         if obj > lear.tols[:pos]
             _pr_full && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]

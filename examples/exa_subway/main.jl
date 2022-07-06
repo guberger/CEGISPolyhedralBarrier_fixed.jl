@@ -120,7 +120,7 @@ udom = Polyhedron()
 CPB.add_halfspace!(udom, [1, -1], 11)
 CPB.add_domain!(uset, 1, udom ∩ box)
 CPB.add_domain!(uset, 2, udom ∩ box)
-# CPB.add_domain!(uset, 3, udom ∩ box)
+CPB.add_domain!(uset, 3, udom ∩ box)
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -130,8 +130,8 @@ ax_ = fig.subplots(
     subplot_kw=Dict("aspect"=>"equal")
 )
 
-xlims = (-20, 20)
-ylims = (-20, 20)
+xlims = (-22, 22)
+ylims = (-22, 22)
 
 for ax in ax_
     ax.set_xlim(xlims...)
@@ -161,7 +161,7 @@ for piece in sys.pieces
 end
 
 ## Learner
-lear = CPB.Learner{2}((2, 1, 1), sys, iset, uset)
+lear = CPB.Learner{2}((2, 1, 2), sys, iset, uset)
 CPB.set_tol!(lear, :rad, 1e-3)
 CPB.set_tol!(lear, :dom, 1e-8)
 status, mpf, gen = CPB.learn_lyapunov!(lear, Inf, solver, solver, PR=100)

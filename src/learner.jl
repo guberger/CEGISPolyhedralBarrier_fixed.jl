@@ -75,8 +75,32 @@ function _add_predicates_lie!(verif, N, sys)
     end
 end
 
+abstract type TreeExploreMethod end
+struct DepthMin <: TreeExploreMethod end
+struct Depth1st <: TreeExploreMethod end
+struct RadiusMax <: TreeExploreMethod end
+
+Node{GT} = Tuple{GT,Int,Float64}
+
+_make_queue(::Depth1st, ::Type{T}) where T = Stack{Node{T}}()
+_make_queue(::DepthMin, ::Type{T}) where T = Queue{Node{T}}()
+_make_queue(::RadiusMax, ::Type{T}) where T = PriorityQueue{Node{T},Float64}()
+
+_enqueue!(::Depth1st, Q, node) = push!(Q, node)
+_enqueue!(::DepthMin, Q, node) = enqueue!(Q, node)
+_enqueue!(::RadiusMax, Q, node) = enqueue!(Q, node=>-node[3])
+
+_dequeue!(::Depth1st, Q) = pop!(Q)
+_dequeue!(::Union{DepthMin,RadiusMax}, Q) = dequeue!(Q)
+
+max_depth(Q::Union{Stack{T},Queue{T}}) where {T<:Node} = maximum(n->n[2], Q)
+max_depth(Q::PriorityQueue{T}) where {T<:Node} = maximum(n->n.first[2], Q)
+max_radius(Q::Union{Stack{T},Queue{T}}) where {T<:Node} = maximum(n->n[3], Q)
+max_radius(Q::PriorityQueue{T}) where {T<:Node} = maximum(n->n.first[3], Q)
+
 function learn_lyapunov!(
-        lear::Learner, iter_max, solver_gen, solver_verif; PR="full"
+        lear::Learner, iter_max, solver_gen, solver_verif;
+        PR="full", method::TreeExploreMethod=Depth1st()
     )
     @assert iter_max ≥ 1
     verif = Verifier()
@@ -90,87 +114,88 @@ function learn_lyapunov!(
         end
     end
     neg_evids = gen.neg_evids
-    # gen_queue = PriorityQueue((gen, 0, -Inf)=>-Inf)
-    gen_queue = PriorityQueue((gen, 0, 0)=>0)
+    node_queue = _make_queue(method, typeof(gen))
+    _enqueue!(method, node_queue, (gen, 0, Inf))
 
     iter = 0
     xmax, rmax = lear.params[:xmax], lear.params[:rmax]
     tol_dom = lear.tols[:dom]
-    depth_max = 0
-    mpf = MultiPolyFunc(0)
+    mpf::MultiPolyFunc = MultiPolyFunc(0) # never used
 
     # print rules
-    _pr_full = PR == "full"
-    _pr_none = PR == "none"
+    _pr_full(PR) = PR == "full"
+    _pr_none(PR) = PR == "none"
     _pr_part(PR, iter) =
-        PR == "full" || (PR !="none" && mod(iter - 1, Int(PR)) == 0)
+        PR == "full" ? true :
+        PR =="none" ? false :
+        mod(iter - 1, Int(PR)) == 0
 
     while true
-        if isempty(gen_queue)
-            !_pr_none && println("Infeasible: queue empty")
+        if isempty(node_queue)
+            !_pr_none(PR) && println("Infeasible: queue empty")
             return BARRIER_INFEASIBLE, mpf, gen
         end
 
         iter += 1
         if iter > iter_max
-            !_pr_none && println("Max iter exceeded: ", iter)
+            !_pr_none(PR) && println("Max iter exceeded: ", iter)
             return MAX_ITER_REACHED, mpf, gen
         end
-        _pr_part(PR, iter) && println("Iter: ", iter)
+        if _pr_part(PR, iter)
+            println("Iter: ", iter)
+            d_max = max_depth(node_queue)
+            r_max = max_radius(node_queue)
+            println("|--- depth: ", d_max, ", r: ", r_max)
+        end
 
         # Generator
-        gen, depth, δ = dequeue!(gen_queue)
-        depth_max = max(depth_max, depth)
-        _pr_part(PR, iter) &&
-            println("|--- depth: ", depth_max, ", δ: ", δ)
+        gen, depth, = _dequeue!(method, node_queue)
         mpf, r = compute_mpf_robust(gen, solver_gen)
-        _pr_full && println("|--- radius: ", r)
+        _pr_full(PR) && println("|--- radius: ", r)
         if r < lear.tols[:rad]
-            _pr_full && println("Radius too small: ", r)
+            _pr_full(PR) && println("Radius too small: ", r)
             continue
         end
 
         # Verifier
-        _pr_full && print("|--- Verify pos... ")
+        _pr_full(PR) && print("|--- Verify pos... ")
         x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
-        # δ = -r
-        δ = depth + 1
         if obj > lear.tols[:pos]
-            _pr_full && println("CE found: ", x, ", ", loc, ", ", obj)
+            _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
                 pos_evids = copy(gen.pos_evids)
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
+                _enqueue!(method, node_queue, (gen2, depth + 1, r))
             end
             continue
         else
-            _pr_full && println("No CE found: ", obj)
+            _pr_full(PR) && println("No CE found: ", obj)
         end
-        _pr_full && print("|--- Verify lie... ")
+        _pr_full(PR) && print("|--- Verify lie... ")
         x, obj, loc = verify_lie(verif, mpf, xmax, rmax, solver_verif)
         if obj > lear.tols[:lie]
-            _pr_full && println("CE found: ", x, ", ", loc, ", ", obj)
+            _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
                 pos_evids = copy(gen.pos_evids)
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
+                _enqueue!(method, node_queue, (gen2, depth + 1, r))
             end
             pos_evids = gen.pos_evids
             lie_evids = copy(gen.lie_evids)
             gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
             _add_evidences_lie!(gen2, lear.sys, loc, x, tol_dom)
-            enqueue!(gen_queue, (gen2, depth + 1, δ)=>δ)
+            _enqueue!(method, node_queue, (gen2, depth + 1, r))
             continue
         else
-            _pr_full && println("No CE found: ", obj)
+            _pr_full(PR) && println("No CE found: ", obj)
         end
         
-        !_pr_none && println("No CE found")
-        !_pr_none && println("Valid CLF: terminated")
+        !_pr_none(PR) && println("No CE found")
+        !_pr_none(PR) && println("Valid CLF: terminated")
         return BARRIER_FOUND, mpf, gen
     end
     @assert false

@@ -83,14 +83,18 @@ b = [0]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
 lear = CPB.Learner{1}((0, 1), sys, iset, uset)
-status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, 30, solver, solver, method=CPB.DepthMin()
+)
 
 @testset "learn lyapunov disc: rad too small" begin
     @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((1, 1), sys, iset, uset)
-status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, 30, solver, solver, method=CPB.DepthMin()
+)
 
 @testset "learn lyapunov disc: found" begin
     @test status == CPB.BARRIER_FOUND
@@ -112,14 +116,18 @@ b = [-1]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
 lear = CPB.Learner{1}((1, 1), sys, iset, uset)
-status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, 30, solver, solver, PR="none", method=CPB.RadiusMax()
+)
 
 @testset "learn lyapunov disc: rad too small" begin
     @test status == CPB.BARRIER_INFEASIBLE
 end
 
 lear = CPB.Learner{1}((2, 1), sys, iset, uset)
-status, mpf, gen = CPB.learn_lyapunov!(lear, 30, solver, solver, PR="none")
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, 30, solver, solver, PR="none", method=CPB.RadiusMax()
+)
 
 @testset "learn lyapunov disc: found" begin
     @test status == CPB.BARRIER_FOUND

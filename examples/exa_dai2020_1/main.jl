@@ -109,7 +109,9 @@ end
 lear = CPB.Learner{2}((3,), sys, iset, uset)
 CPB.set_tol!(lear, :rad, 1e-1)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, gen = CPB.learn_lyapunov!(lear, Inf, solver, solver, PR=50)
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, Inf, solver, solver, PR=2, method=CPB.RadiusMax()
+)
 
 display(status)
 

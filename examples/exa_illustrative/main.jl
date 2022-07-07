@@ -98,7 +98,9 @@ end
 ## Learner
 lear = CPB.Learner{2}((1, 1), sys, iset, uset)
 CPB.set_tol!(lear, :dom, 1e-8)
-status, mpf, gen = CPB.learn_lyapunov!(lear, 1000, solver, solver)
+status, mpf, gen = CPB.learn_lyapunov!(
+    lear, 1000, solver, solver, method=CPB.DepthMin()
+)
 
 display(status)
 

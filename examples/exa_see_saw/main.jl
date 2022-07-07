@@ -106,7 +106,7 @@ end
 lear = CPB.Learner{2}((2,), sys, iset, uset)
 CPB.set_tol!(lear, :dom, 1e-8)
 status, mpf, gen = CPB.learn_lyapunov!(
-    lear, Inf, solver, solver, PR=100, method=CPB.RandLeaf()
+    lear, Inf, solver, solver, PR=100, method=CPB.DepthMin()
 )
 
 display(status)

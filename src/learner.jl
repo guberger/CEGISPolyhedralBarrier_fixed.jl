@@ -29,7 +29,7 @@ function Learner{N}(nafs, sys, iset, uset) where N
     ])
     params = Dict([
         :xmax => 1e3,
-        :rmax => 1e2
+        :objmax => 1e2
     ])
     return Learner{N,length(nafs)}(nafs, sys, iset, uset, tols, params)
 end
@@ -78,30 +78,32 @@ end
 abstract type TreeExploreMethod end
 struct DepthMin <: TreeExploreMethod end
 struct Depth1st <: TreeExploreMethod end
-struct RadiusMax <: TreeExploreMethod end
-struct RandLeaf <: TreeExploreMethod end
+struct RadMax <: TreeExploreMethod end
+struct ObjMin <: TreeExploreMethod end
 
-Node{GT} = Tuple{GT,Int,Float64}
+Node{GT} = Tuple{GT,Int,Float64,Tuple{Float64,Float64}}
 
 _make_queue(::Depth1st, GT) = Stack{Node{GT}}()
 _make_queue(::DepthMin, GT) = Queue{Node{GT}}()
-_make_queue(::RadiusMax, GT) = PriorityQueue{Node{GT},Float64}()
-_make_queue(::RandLeaf, GT) = PriorityQueue{Node{GT},Float64}()
+_make_queue(::RadMax, GT) = PriorityQueue{Node{GT},Float64}()
+_make_queue(::ObjMin, GT) = PriorityQueue{Node{GT},Tuple{Float64,Float64}}()
 
 _enqueue!(::Depth1st, Q, node) = push!(Q, node)
 _enqueue!(::DepthMin, Q, node) = enqueue!(Q, node)
-_enqueue!(::RadiusMax, Q, node) = enqueue!(Q, node=>-node[3])
-_enqueue!(::RandLeaf, Q, node) = enqueue!(Q, node=>node[2]/5 + rand())
+_enqueue!(::RadMax, Q, node) = enqueue!(Q, node=>-node[3])
+_enqueue!(::ObjMin, Q, node) = enqueue!(Q, node=>node[4])
 
 _dequeue!(::Depth1st, Q) = pop!(Q)
 _dequeue!(::DepthMin, Q) = dequeue!(Q)
-_dequeue!(::RadiusMax, Q) = dequeue!(Q)
-_dequeue!(::RandLeaf, Q) = dequeue!(Q)
+_dequeue!(::RadMax, Q) = dequeue!(Q)
+_dequeue!(::ObjMin, Q) = dequeue!(Q)
 
 max_depth(Q::Union{Stack,Queue}) = maximum(n->n[2], Q)
 max_depth(Q::PriorityQueue) = maximum(n->n.first[2], Q)
-max_radius(Q::Union{Stack,Queue}) = maximum(n->n[3], Q)
-max_radius(Q::PriorityQueue) = maximum(n->n.first[3], Q)
+max_rad(Q::Union{Stack,Queue}) = maximum(n->n[3], Q)
+max_rad(Q::PriorityQueue) = maximum(n->n.first[3], Q)
+min_obj(Q::Union{Stack,Queue}) = minimum(n->n[4], Q)
+min_obj(Q::PriorityQueue) = minimum(n->n.first[4], Q)
 
 function learn_lyapunov!(
         lear::Learner, iter_max, solver_gen, solver_verif;
@@ -120,10 +122,10 @@ function learn_lyapunov!(
     end
     neg_evids = gen.neg_evids
     node_queue = _make_queue(method, typeof(gen))
-    _enqueue!(method, node_queue, (gen, 0, Inf))
+    _enqueue!(method, node_queue, (gen, 0, Inf, (Inf, Inf)))
 
     iter = 0
-    xmax, rmax = lear.params[:xmax], lear.params[:rmax]
+    xmax, objmax = lear.params[:xmax], lear.params[:objmax]
     tol_dom = lear.tols[:dom]
     mpf::MultiPolyFunc = MultiPolyFunc(0) # never used
 
@@ -148,23 +150,26 @@ function learn_lyapunov!(
         end
         if _pr_part(PR, iter)
             println("Iter: ", iter)
-            d_max = max_depth(node_queue)
-            r_max = max_radius(node_queue)
-            println("|--- depth: ", d_max, ", r: ", r_max)
+            println(
+                "|--- max: depth: ", max_depth(node_queue),
+                ", rad: ", max_rad(node_queue), ", obj: ", min_obj(node_queue)
+            )
         end
 
         # Generator
         gen, depth, = _dequeue!(method, node_queue)
+        _pr_full(PR) && print("|--- depth: ", depth)
         mpf, r = compute_mpf_robust(gen, solver_gen)
-        _pr_full(PR) && println("|--- radius: ", r)
+        _pr_full(PR) && println(", rad: ", r)
         if r < lear.tols[:rad]
             _pr_full(PR) && println("Radius too small: ", r)
             continue
         end
+        depth2 = depth + 1
 
         # Verifier
         _pr_full(PR) && print("|--- Verify pos... ")
-        x, obj, loc = verify_pos(verif, mpf, xmax, rmax, solver_verif)
+        x, obj, loc = verify_pos(verif, mpf, xmax, objmax, solver_verif)
         if obj > lear.tols[:pos]
             _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
@@ -172,14 +177,14 @@ function learn_lyapunov!(
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                _enqueue!(method, node_queue, (gen2, depth + 1, r))
+                _enqueue!(method, node_queue, (gen2, depth2, r, (obj, Inf)))
             end
             continue
         else
             _pr_full(PR) && println("No CE found: ", obj)
         end
         _pr_full(PR) && print("|--- Verify lie... ")
-        x, obj, loc = verify_lie(verif, mpf, xmax, rmax, solver_verif)
+        x, obj, loc = verify_lie(verif, mpf, xmax, objmax, solver_verif)
         if obj > lear.tols[:lie]
             _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
             for i = 1:lear.nafs[loc]
@@ -187,13 +192,13 @@ function learn_lyapunov!(
                 lie_evids = gen.lie_evids
                 gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
                 _add_evidences_pos!(gen2, i, loc, x)
-                _enqueue!(method, node_queue, (gen2, depth + 1, r))
+                _enqueue!(method, node_queue, (gen2, depth2, r, (-Inf, obj)))
             end
             pos_evids = gen.pos_evids
             lie_evids = copy(gen.lie_evids)
             gen2 = Generator(lear.nafs, neg_evids, pos_evids, lie_evids)
             _add_evidences_lie!(gen2, lear.sys, loc, x, tol_dom)
-            _enqueue!(method, node_queue, (gen2, depth + 1, r))
+            _enqueue!(method, node_queue, (gen2, depth2, r, (-Inf, obj)))
             continue
         else
             _pr_full(PR) && println("No CE found: ", obj)

@@ -79,24 +79,29 @@ abstract type TreeExploreMethod end
 struct DepthMin <: TreeExploreMethod end
 struct Depth1st <: TreeExploreMethod end
 struct RadiusMax <: TreeExploreMethod end
+struct RandLeaf <: TreeExploreMethod end
 
 Node{GT} = Tuple{GT,Int,Float64}
 
-_make_queue(::Depth1st, ::Type{T}) where T = Stack{Node{T}}()
-_make_queue(::DepthMin, ::Type{T}) where T = Queue{Node{T}}()
-_make_queue(::RadiusMax, ::Type{T}) where T = PriorityQueue{Node{T},Float64}()
+_make_queue(::Depth1st, GT) = Stack{Node{GT}}()
+_make_queue(::DepthMin, GT) = Queue{Node{GT}}()
+_make_queue(::RadiusMax, GT) = PriorityQueue{Node{GT},Float64}()
+_make_queue(::RandLeaf, GT) = PriorityQueue{Node{GT},Float64}()
 
 _enqueue!(::Depth1st, Q, node) = push!(Q, node)
 _enqueue!(::DepthMin, Q, node) = enqueue!(Q, node)
 _enqueue!(::RadiusMax, Q, node) = enqueue!(Q, node=>-node[3])
+_enqueue!(::RandLeaf, Q, node) = enqueue!(Q, node=>node[2]/5 + rand())
 
 _dequeue!(::Depth1st, Q) = pop!(Q)
-_dequeue!(::Union{DepthMin,RadiusMax}, Q) = dequeue!(Q)
+_dequeue!(::DepthMin, Q) = dequeue!(Q)
+_dequeue!(::RadiusMax, Q) = dequeue!(Q)
+_dequeue!(::RandLeaf, Q) = dequeue!(Q)
 
-max_depth(Q::Union{Stack{T},Queue{T}}) where {T<:Node} = maximum(n->n[2], Q)
-max_depth(Q::PriorityQueue{T}) where {T<:Node} = maximum(n->n.first[2], Q)
-max_radius(Q::Union{Stack{T},Queue{T}}) where {T<:Node} = maximum(n->n[3], Q)
-max_radius(Q::PriorityQueue{T}) where {T<:Node} = maximum(n->n.first[3], Q)
+max_depth(Q::Union{Stack,Queue}) = maximum(n->n[2], Q)
+max_depth(Q::PriorityQueue) = maximum(n->n.first[2], Q)
+max_radius(Q::Union{Stack,Queue}) = maximum(n->n[3], Q)
+max_radius(Q::PriorityQueue) = maximum(n->n.first[3], Q)
 
 function learn_lyapunov!(
         lear::Learner, iter_max, solver_gen, solver_verif;

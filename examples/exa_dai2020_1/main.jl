@@ -127,4 +127,8 @@ for evid in gen.lie_evids
     plot_point!(ax_[evid.loc], evid.point, mc="purple")
 end
 
+fig.savefig(string(
+    @__DIR__, "/../figures/fig_exa_dai2020_1.png"
+), dpi=200, transparent=false, bbox_inches="tight")
+
 end # module

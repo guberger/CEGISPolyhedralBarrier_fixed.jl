@@ -115,12 +115,12 @@ udom = Polyhedron()
 CPB.add_halfspace!(udom, [-1, 1], 11)
 CPB.add_domain!(uset, 1, udom ∩ box)
 # CPB.add_domain!(uset, 2, udom ∩ box)
-CPB.add_domain!(uset, 3, udom ∩ box)
+# CPB.add_domain!(uset, 3, udom ∩ box)
 udom = Polyhedron()
 CPB.add_halfspace!(udom, [1, -1], 11)
-CPB.add_domain!(uset, 1, udom ∩ box)
-CPB.add_domain!(uset, 2, udom ∩ box)
-CPB.add_domain!(uset, 3, udom ∩ box)
+# CPB.add_domain!(uset, 1, udom ∩ box)
+# CPB.add_domain!(uset, 2, udom ∩ box)
+# CPB.add_domain!(uset, 3, udom ∩ box)
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -161,14 +161,16 @@ for piece in sys.pieces
 end
 
 ## Learner
-lear = CPB.Learner{2}((2, 1, 2), sys, iset, uset)
+lear = CPB.Learner{2}((2, 1, 1), sys, iset, uset)
 CPB.set_tol!(lear, :rad, 1e-3)
 CPB.set_tol!(lear, :dom, 1e-8)
 status, mpf, gen = CPB.learn_lyapunov!(
-    lear, Inf, solver, solver, PR=500, method=CPB.RandLeaf()
+    lear, Inf, solver, solver, PR=500, method=CPB.DepthMin()
 )
 
 display(status)
+
+# with (2, 1, 2), DepthMin: 253k iterations, depth=47 (>5 minutes)
 
 for (loc, pf) in enumerate(mpf.pfs)
     plot_level!(ax_[loc], pf.afs, [(-21, -21), (21, 21)], fa=0.1, ew=0.5)
@@ -181,5 +183,9 @@ end
 for evid in gen.lie_evids
     plot_point!(ax_[evid.loc], evid.point, mc="purple")
 end
+
+fig.savefig(string(
+    @__DIR__, "/../figures/fig_exa_subway_easy.png"
+), dpi=200, transparent=false, bbox_inches="tight")
 
 end # module

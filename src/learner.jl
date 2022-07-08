@@ -208,5 +208,4 @@ function learn_lyapunov!(
         !_pr_none(PR) && println("Valid CLF: terminated")
         return BARRIER_FOUND, mpf, gen
     end
-    @assert false
 end

@@ -12,7 +12,6 @@ CPB = CEGISPolyhedralBarrier
 Generator = CPB.Generator
 NegEvidence = CPB.NegEvidence
 PosEvidence = CPB.PosEvidence
-LieEvidence = CPB.LieEvidence
 PolyFunc = CPB.PolyFunc
 _norm(pf::PolyFunc) = maximum(lf -> max(norm(lf.lin, Inf), lf.off), pf.afs)
 
@@ -34,22 +33,22 @@ end
 ## Pos
 gen = CPB.Generator{2}((1,))
 
-CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0)))
-CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(0.5, 0.0), 0.5))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0), 0.0))
+CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(0.5, 0.0), 1.5))
 
 mpf, r = CPB.compute_mpf_robust(gen, solver)
 
 @testset "compute mpf pos" begin
     @test maximum(pf -> _norm(pf), mpf.pfs) ≈ 1
-    @test r ≈ 0.5/(0.5 + 1)
+    @test r ≈ 0.5/1.5
 end
 
 ## Lie
 gen = CPB.Generator{2}((1,))
 
-CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0)))
-CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(8.0, 0.0), 8.0))
-CPB.add_evidence!(gen, LieEvidence(1, SVector(4.0, 0.0), 4.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0), 0.0))
+CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(8.0, 0.0), 9.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(4.0, 0.0), 5.0))
 
 mpf, r = CPB.compute_mpf_robust(gen, solver)
 
@@ -61,9 +60,9 @@ end
 ## Lie
 gen = CPB.Generator{2}((1,))
 
-CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0)))
-CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(6.0, 0.0), 0.0))
-CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(8.0, 0.0), 0.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(0.0, 0.0), 0.0))
+CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(6.0, 0.0), 1.0))
+CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(8.0, 0.0), 1.0))
 
 mpf, r = CPB.compute_mpf_robust(gen, solver)
 
@@ -75,10 +74,10 @@ end
 ## Pos and Lie: 2 wits #1
 gen = CPB.Generator{2}((1, 1))
 
-CPB.add_evidence!(gen, NegEvidence(1, SVector(2.0, 0.0)))
-CPB.add_evidence!(gen, NegEvidence(1, SVector(-2.0, 0.0)))
-CPB.add_evidence!(gen, PosEvidence(2, 1, SVector(2.0, 0.0), 2.0))
-CPB.add_evidence!(gen, LieEvidence(2, SVector(4.0, 0.0), 4.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(2.0, 0.0), 0.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(-2.0, 0.0), 0.0))
+CPB.add_evidence!(gen, PosEvidence(2, 1, SVector(2.0, 0.0), 3.0))
+CPB.add_evidence!(gen, NegEvidence(2, SVector(4.0, 0.0), 5.0))
 
 mpf, r = CPB.compute_mpf_robust(gen, solver)
 
@@ -90,12 +89,12 @@ end
 ## Pos and Lie: 2 wits #2
 gen = CPB.Generator{2}((2, 1))
 
-CPB.add_evidence!(gen, NegEvidence(1, SVector(2.0, 0.0)))
-CPB.add_evidence!(gen, NegEvidence(1, SVector(-2.0, 0.0)))
-CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(4.0, 0.0), 4.0))
-CPB.add_evidence!(gen, PosEvidence(1, 2, SVector(-4.0, 0.0), 4.0))
-CPB.add_evidence!(gen, LieEvidence(2, SVector(1.0, 0.0), 1.0))
-CPB.add_evidence!(gen, LieEvidence(1, SVector(2.0, 0.0), 2.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(2.0, 0.0), 0.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(-2.0, 0.0), 0.0))
+CPB.add_evidence!(gen, PosEvidence(1, 1, SVector(4.0, 0.0), 5.0))
+CPB.add_evidence!(gen, PosEvidence(1, 2, SVector(-4.0, 0.0), 5.0))
+CPB.add_evidence!(gen, NegEvidence(2, SVector(1.0, 0.0), 2.0))
+CPB.add_evidence!(gen, NegEvidence(1, SVector(2.0, 0.0), 3.0))
 
 mpf, r = CPB.compute_mpf_robust(gen, solver)
 

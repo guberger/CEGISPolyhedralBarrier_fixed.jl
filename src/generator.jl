@@ -1,31 +1,24 @@
 struct NegEvidence{N}
     loc::Int
     point::Point{N}
+    α::Float64 # weight
 end
 
 struct PosEvidence{N}
     loc::Int
     i::Int
     point::Point{N}
-    np::Float64
-end
-
-struct LieEvidence{N}
-    loc::Int
-    point::Point{N}
-    np::Float64
+    α::Float64 # weight
 end
 
 struct Generator{N,M}
     nafs::NTuple{M,Int}
     neg_evids::Vector{NegEvidence{N}}
     pos_evids::Vector{PosEvidence{N}}
-    lie_evids::Vector{LieEvidence{N}}
 end
 
-Generator{N}(nafs::NTuple{M,Int}) where {N,M} = Generator{N,M}(
-    nafs, NegEvidence{N}[], PosEvidence{N}[], LieEvidence{N}[]
-)
+Generator{N}(nafs::NTuple{M,Int}) where {N,M} =
+    Generator{N,M}(nafs, NegEvidence{N}[], PosEvidence{N}[])
 nvar(::Generator{N}) where N = N
 
 function add_evidence!(gen::Generator, evid::NegEvidence)
@@ -34,10 +27,6 @@ end
 
 function add_evidence!(gen::Generator, evid::PosEvidence)
     push!(gen.pos_evids, evid)
-end
-
-function add_evidence!(gen::Generator, evid::LieEvidence)
-    push!(gen.lie_evids, evid)
 end
 
 ## Compute afs
@@ -66,15 +55,11 @@ function _add_vars!(model, N, nafs)
     return pfs, r
 end
 
-function _add_neg_constr!(model, af, point)
-    @constraint(model, _eval(af, point) ≤ 0)
-end
-
-function _add_pos_constr!(model, af, r, point, α)
+function _add_geq_constr!(model, af, r, point, α)
     @constraint(model, _eval(af, point) - α*r ≥ 0)
 end
 
-function _add_lie_constr(model, af, r, point, α)
+function _add_leq_constr(model, af, r, point, α)
     @constraint(model, _eval(af, point) + α*r ≤ 0)
 end
 
@@ -88,19 +73,13 @@ function _compute_mpf(prob::GeneratorProblem, gen::Generator, solver)
 
     for evid in gen.neg_evids
         for af in pfs[evid.loc].afs
-            _add_constr_prob!(prob, model, af, evid)
+            _add_constr_prob!(prob, model, af, r, evid)
         end
     end
 
     for evid in gen.pos_evids
         af = pfs[evid.loc].afs[evid.i]
         _add_constr_prob!(prob, model, af, r, evid)
-    end
-
-    for evid in gen.lie_evids
-        for af in pfs[evid.loc].afs
-            _add_constr_prob!(prob, model, af, r, evid)
-        end
     end
 
     @objective(model, Max, r)
@@ -120,22 +99,15 @@ end
 struct GeneratorRobust <: GeneratorProblem end
 
 function _add_constr_prob!(
-        ::GeneratorRobust, model, af, evid::NegEvidence
+        ::GeneratorRobust, model, af, r, evid::NegEvidence
     )
-    _add_neg_constr!(model, af, evid.point)
+    _add_leq_constr(model, af, r, evid.point, evid.α)
 end
-
 
 function _add_constr_prob!(
         ::GeneratorRobust, model, af, r, evid::PosEvidence
     )
-    _add_pos_constr!(model, af, r, evid.point, evid.np + 1)
-end
-
-function _add_constr_prob!(
-        ::GeneratorRobust, model, af, r, evid::LieEvidence
-    )
-    _add_lie_constr(model, af, r, evid.point, evid.np + 1)
+    _add_geq_constr!(model, af, r, evid.point, evid.α)
 end
 
 function compute_mpf_robust(gen::Generator, solver)

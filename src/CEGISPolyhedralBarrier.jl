@@ -46,19 +46,12 @@ System() = System(Piece[])
 add_piece!(sys::System, piece::Piece) = push!(sys.pieces, piece)
 add_piece!(sys::System, piece_...) = add_piece!(sys, Piece(piece_...))
 
-struct InitialSet{M}
+struct PointSet{M}
     points_list::NTuple{M,Vector{Vector{Float64}}}
 end
 
-InitialSet{M}() where M = InitialSet(ntuple(loc -> Vector{Float64}[], Val(M)))
-add_point!(S::InitialSet, loc, point) = push!(S.points_list[loc], point)
-
-struct UnsafeSet{M}
-    domains_list::NTuple{M,Vector{Polyhedron}}
-end
-
-UnsafeSet{M}() where M = UnsafeSet(ntuple(loc -> Polyhedron[], Val(M)))
-add_domain!(S::UnsafeSet, loc, domain) = push!(S.domains_list[loc], domain)
+PointSet{M}() where M = PointSet(ntuple(loc -> Vector{Float64}[], Val(M)))
+add_point!(S::PointSet, loc, point) = push!(S.points_list[loc], point)
 
 include("generator.jl")
 include("verifier.jl")

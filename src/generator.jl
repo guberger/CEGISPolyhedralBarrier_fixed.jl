@@ -1,3 +1,14 @@
+struct InEvidence{N}
+    loc::Int
+    point::Point{N}
+end
+
+struct ExEvidence{N}
+    loc::Int
+    i::Int
+    point::Point{N}
+end
+
 struct NegEvidence{N}
     loc::Int
     point::Point{N}
@@ -13,13 +24,24 @@ end
 
 struct Generator{N,M}
     nafs::NTuple{M,Int}
+    in_evids::Vector{InEvidence{N}}
+    ex_evids::Vector{ExEvidence{N}}
     neg_evids::Vector{NegEvidence{N}}
     pos_evids::Vector{PosEvidence{N}}
 end
 
-Generator{N}(nafs::NTuple{M,Int}) where {N,M} =
-    Generator{N,M}(nafs, NegEvidence{N}[], PosEvidence{N}[])
-nvar(::Generator{N}) where N = N
+Generator{N}(nafs::NTuple{M,Int}) where {N,M} = Generator{N,M}(
+    nafs, InEvidence{N}[], ExEvidence{N}[],
+    NegEvidence{N}[], PosEvidence{N}[]
+)
+
+function add_evidence!(gen::Generator, evid::InEvidence)
+    push!(gen.in_evids, evid)
+end
+
+function add_evidence!(gen::Generator, evid::ExEvidence)
+    push!(gen.ex_evids, evid)
+end
 
 function add_evidence!(gen::Generator, evid::NegEvidence)
     push!(gen.neg_evids, evid)
@@ -67,9 +89,22 @@ _value(af::_AF) = AffForm(value.(af.lin), value(af.off))
 
 abstract type GeneratorProblem end
 
-function _compute_mpf(prob::GeneratorProblem, gen::Generator, solver)
+function _compute_mpf(
+        prob::GeneratorProblem, gen::Generator{N}, solver
+    ) where N
     model = solver()
-    pfs, r = _add_vars!(model, nvar(gen), gen.nafs)
+    pfs, r = _add_vars!(model, N, gen.nafs)
+
+    for evid in gen.in_evids
+        for af in pfs[evid.loc].afs
+            _add_constr_prob!(prob, model, af, r, evid)
+        end
+    end
+
+    for evid in gen.ex_evids
+        af = pfs[evid.loc].afs[evid.i]
+        _add_constr_prob!(prob, model, af, r, evid)
+    end
 
     for evid in gen.neg_evids
         for af in pfs[evid.loc].afs
@@ -97,6 +132,18 @@ end
 ## Robust
 
 struct GeneratorRobust <: GeneratorProblem end
+
+function _add_constr_prob!(
+        ::GeneratorRobust, model, af, r, evid::InEvidence
+    )
+    _add_leq_constr(model, af, r, evid.point, 0)
+end
+
+function _add_constr_prob!(
+        ::GeneratorRobust, model, af, r, evid::ExEvidence
+    )
+    _add_geq_constr!(model, af, r, evid.point, 0)
+end
 
 function _add_constr_prob!(
         ::GeneratorRobust, model, af, r, evid::NegEvidence

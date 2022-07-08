@@ -10,8 +10,7 @@ end
 CPB = CEGISPolyhedralBarrier
 Polyhedron = CPB.Polyhedron
 System = CPB.System
-InitialSet = CPB.InitialSet
-UnsafeSet = CPB.UnsafeSet
+PointSet = CPB.PointSet
 PolyFunc = CPB.PolyFunc
 _norm(pf::PolyFunc) = maximum(lf -> max(norm(lf.lin, Inf), lf.off), pf.afs)
 
@@ -42,23 +41,22 @@ A = reshape([-1], 1, 1)
 b = [1]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
-iset = InitialSet{2}()
+iset = PointSet{2}()
 CPB.add_point!(iset, 1, [-1])
 CPB.add_point!(iset, 1, [1])
 
-uset = UnsafeSet{2}()
-udom = Polyhedron()
-CPB.add_halfspace!(udom, [-1], 1.1)
-CPB.add_domain!(uset, 2, udom)
+uset = PointSet{2}()
+CPB.add_point!(uset, 2, [1.1])
+CPB.add_point!(uset, 2, [2.1])
 
 lear = CPB.Learner{1}((10, 10), sys, iset, uset)
-CPB.set_tol!(lear, :rad, 10)
+CPB.set_tol!(lear, :radius, 10)
 CPB.set_param!(lear, :xmax, 1e2)
 
 @testset "set tol and param" begin
     @test_throws AssertionError CPB.set_tol!(lear, :dumb, 0)
     @test_throws AssertionError CPB.set_param!(lear, :dumb, 0)
-    @test lear.tols[:rad] ≈ 10
+    @test lear.tols[:radius] ≈ 10
     @test lear.params[:xmax] ≈ 100
 end
 
@@ -71,7 +69,7 @@ for method in _methods
         )
         @testset "learn lyapunov disc: max iter" begin
             @test status == CPB.MAX_ITER_REACHED
-            @test length(gen.pos_evids) + length(gen.lie_evids) == 0
+            @test length(gen.neg_evids) + length(gen.pos_evids) == 0
         end
     end
 end
@@ -97,7 +95,7 @@ A = reshape([-1], 1, 1)
 b = [0]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
-lear = CPB.Learner{1}((0, 1), sys, iset, uset)
+lear = CPB.Learner{1}((-1, 1), sys, iset, uset)
 
 for method in _methods
     for PR in _PRs
@@ -138,7 +136,7 @@ A = reshape([1], 1, 1)
 b = [-1]
 CPB.add_piece!(sys, domain, 1, A, b, 2)
 
-lear = CPB.Learner{1}((1, 1), sys, iset, uset)
+lear = CPB.Learner{1}((0, 0), sys, iset, uset)
 
 for method in _methods
     for PR in _PRs

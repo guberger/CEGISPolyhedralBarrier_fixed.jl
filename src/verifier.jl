@@ -1,23 +1,5 @@
-struct Predicate
-    N::Int
-    domain::Polyhedron
-    loc1::Int
-    A::Matrix{Float64}
-    b::Vector{Float64}
-    loc2::Int
-end
-
-struct Verifier
-    predics::Vector{Predicate}
-end
-
-Verifier() = Verifier(Predicate[])
-
-function add_predicate!(verif::Verifier, predic::Predicate)
-    push!(verif.predics, predic)
-end
-
-function _verify!(N, domain, A, b, pf1, af2, xmax, solver)
+function _verify(domain, A, b, pf1, af2, xmax, solver)
+    N = size(A, 2)
     model = solver()
     x = @variable(model, [1:N], lower_bound=-xmax, upper_bound=xmax)
 
@@ -41,19 +23,19 @@ function _verify!(N, domain, A, b, pf1, af2, xmax, solver)
     return xopt, ropt, flag
 end
 
-function verify_lie(verif::Verifier, mpf::MultiPolyFunc, xmax, rmax, solver)
+function verify(mpf::MultiPolyFunc, sys::System, xmax, solver)
     xopt::Vector{Float64} = Float64[]
     ropt::Float64 = -Inf
     locopt::Int = 0
-    for predic in verif.predics
-        N, domain, A, b = predic.N, predic.domain, predic.A, predic.b
-        pf1 = mpf.pfs[predic.loc1]
-        for af2 in mpf.pfs[predic.loc2].afs
-            x, r, flag = _verify!(N, domain, A, b, pf1, af2, xmax, solver)
+    for piece in sys.pieces
+        domain, A, b = piece.domain, piece.A, piece.b
+        pf1 = mpf.pfs[piece.loc1]
+        for af2 in mpf.pfs[piece.loc2].afs
+            x, r, flag = _verify(domain, A, b, pf1, af2, xmax, solver)
             if flag && r > ropt
                 xopt = x
                 ropt = r
-                locopt = predic.loc1
+                locopt = piece.loc1
             end
         end
     end

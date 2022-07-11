@@ -5,53 +5,57 @@ using DataStructures
 using StaticArrays
 using JuMP
 
-include("polyhedra.jl")
-
 Point{N} = SVector{N,Float64}
 
-struct AffForm
-    lin::Vector{Float64}
-    off::Float64
+struct AffForm{N}
+    a::Point{N}
+    β::Float64
 end
-_eval(af::AffForm, point) = dot(af.lin, point) + af.off
+_eval(af::AffForm, point) = dot(af.a, point) + af.β
 
-struct PolyFunc
-    afs::Vector{AffForm}
+struct PolyFunc{N}
+    afs::Vector{AffForm{N}}
 end
 
-PolyFunc() = PolyFunc(AffForm[])
+PolyFunc{N}() where N = PolyFunc(AffForm{N}[])
 add_af!(pf::PolyFunc, af::AffForm) = push!(pf.afs, af)
 add_af!(pf::PolyFunc, af_...) = add_af!(pf, AffForm(af_...))
+_neg(pf::PolyFunc, point, tol) = all(af -> _eval(af, point) ≤ tol, pf.afs)
 
-struct MultiPolyFunc
-    pfs::Vector{PolyFunc}
+struct MultiPolyFunc{N,M}
+    pfs::NTuple{M,PolyFunc{N}}
 end
 
-MultiPolyFunc(nloc::Int) = MultiPolyFunc([PolyFunc() for loc = 1:nloc])
+MultiPolyFunc{N,M}() where {N,M} = MultiPolyFunc(
+    ntuple(loc -> PolyFunc{N}(), Val(M))
+)
 add_af!(mpf::MultiPolyFunc, loc::Int, af_...) = add_af!(mpf.pfs[loc], af_...)
 
-struct Piece
-    domain::Polyhedron
+struct Piece{N}
+    pf_dom::PolyFunc{N}
     loc1::Int
-    A::Matrix{Float64}
-    b::Vector{Float64}
+    A::SMatrix{N,N,Float64}
+    b::SVector{N,Float64}
     loc2::Int
 end
 
-struct System
-    pieces::Vector{Piece}
+struct System{N}
+    pieces::Vector{Piece{N}}
 end
 
-System() = System(Piece[])
+System{N}() where N = System(Piece{N}[])
 add_piece!(sys::System, piece::Piece) = push!(sys.pieces, piece)
 add_piece!(sys::System, piece_...) = add_piece!(sys, Piece(piece_...))
 
-struct PointSet{M}
-    points_list::NTuple{M,Vector{Vector{Float64}}}
+struct PointSet{N,M}
+    points_list::NTuple{M,Vector{SVector{N,Float64}}}
 end
 
-PointSet{M}() where M = PointSet(ntuple(loc -> Vector{Float64}[], Val(M)))
-add_point!(S::PointSet, loc, point) = push!(S.points_list[loc], point)
+PointSet{N,M}() where {N,M} = PointSet(
+    ntuple(loc -> SVector{N,Float64}[], Val(M))
+)
+add_point!(S::PointSet, loc::Int, point) = push!(S.points_list[loc], point)
+Base.empty!(S::PointSet) = empty!.(S.points_list)
 
 include("generator.jl")
 include("verifier.jl")

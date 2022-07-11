@@ -1,12 +1,21 @@
-function _verify(domain, A, b, pf1, af2, xmax, solver)
-    N = size(A, 2)
-    model = solver()
-    x = @variable(model, [1:N], lower_bound=-xmax, upper_bound=xmax)
+struct Verifier{N,M}
+    mpf_safe::MultiPolyFunc{N,M}
+    mpf_inv::MultiPolyFunc{N,M}
+    mpf_BF::MultiPolyFunc{N,M}
+    sys::System{N}
+    xmax::Float64
+end
 
-    for h in domain.halfspaces
-        @constraint(model, dot(h.a, x) + h.β ≤ 0)
-    end
-    for af1 in pf1.afs
+# Safe
+function _verify_optim(
+        af1_, af2, A::SMatrix{N,N}, b::SVector{N}, xmax, solver
+    ) where N
+    model = solver()
+    x = SVector(ntuple(
+        k -> @variable(model, lower_bound=-xmax, upper_bound=xmax), Val(N)
+    ))
+
+    for af1 in af1_
         @constraint(model, _eval(af1, x) ≤ 0)
     end
 
@@ -14,7 +23,7 @@ function _verify(domain, A, b, pf1, af2, xmax, solver)
 
     optimize!(model)
 
-    xopt = has_values(model) ? value.(x) : Float64[]
+    xopt = has_values(model) ? value.(x) : SVector(ntuple(k -> NaN, Val(N)))
     ropt = has_values(model) ? objective_value(model) : -Inf
     ps, ts = primal_status(model), termination_status(model)
     flag = ps == FEASIBLE_POINT && ts == OPTIMAL
@@ -23,15 +32,24 @@ function _verify(domain, A, b, pf1, af2, xmax, solver)
     return xopt, ropt, flag
 end
 
-function verify(mpf::MultiPolyFunc, sys::System, xmax, solver)
-    xopt::Vector{Float64} = Float64[]
+abstract type VerifierProblem end
+
+function _verify(
+        prob::VerifierProblem, verif::Verifier{N,M}, solver
+    ) where {N,M}
+    xopt::SVector{N,Float64} = SVector(ntuple(k -> NaN, Val(N)))
     ropt::Float64 = -Inf
     locopt::Int = 0
-    for piece in sys.pieces
-        domain, A, b = piece.domain, piece.A, piece.b
-        pf1 = mpf.pfs[piece.loc1]
-        for af2 in mpf.pfs[piece.loc2].afs
-            x, r, flag = _verify(domain, A, b, pf1, af2, xmax, solver)
+    for piece in verif.sys.pieces
+        pf_dom, A, b = piece.pf_dom, piece.A, piece.b
+        pf_safe = verif.mpf_safe.pfs[piece.loc1]
+        pf_inv = verif.mpf_inv.pfs[piece.loc1]
+        pf_BF = verif.mpf_BF.pfs[piece.loc1]
+        af1_ = Iterators.flatten(
+            (pf_dom.afs, pf_safe.afs, pf_inv.afs, pf_BF.afs)
+        )
+        for af2 in _get_af2_(prob, verif, piece)
+            x, r, flag = _verify_optim(af1_, af2, A, b, verif.xmax, solver)
             if flag && r > ropt
                 xopt = x
                 ropt = r
@@ -40,4 +58,22 @@ function verify(mpf::MultiPolyFunc, sys::System, xmax, solver)
         end
     end
     return xopt, ropt, locopt
+end
+
+struct VerifierSafe <: VerifierProblem end
+
+_get_af2_(::VerifierSafe, verif, piece) = verif.mpf_safe.pfs[piece.loc2].afs
+
+function verify_safe(verif::Verifier, solver)
+    prob = VerifierSafe()
+    return _verify(prob, verif, solver)
+end
+
+struct VerifierBF <: VerifierProblem end
+
+_get_af2_(::VerifierBF, verif, piece) = verif.mpf_BF.pfs[piece.loc2].afs
+
+function verify_BF(verif::Verifier, solver)
+    prob = VerifierBF()
+    return _verify(prob, verif, solver)
 end

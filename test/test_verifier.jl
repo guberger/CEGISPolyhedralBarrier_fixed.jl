@@ -1,4 +1,5 @@
 using LinearAlgebra
+using StaticArrays
 using JuMP
 using HiGHS
 using Test
@@ -8,146 +9,135 @@ else
     using CEGISPolyhedralBarrier
 end
 CPB = CEGISPolyhedralBarrier
-Polyhedron = CPB.Polyhedron
 PolyFunc = CPB.PolyFunc
 MultiPolyFunc = CPB.MultiPolyFunc
 System = CPB.System
+Verifier = CPB.Verifier
 
 solver() = Model(optimizer_with_attributes(
     HiGHS.Optimizer, "output_flag"=>false
 ))
 
-## Parameters
-N = 2
+xmax = 1e3
 
-## Lie infeasible
-sys = System()
-domain = Polyhedron()
-A = [0.5 0.0; 1.0 1.0]
-b = [1, 0]
-CPB.add_piece!(sys, domain, 1, A, b, 1)
+# Set #1
+sys = System{1}()
+pf_dom = PolyFunc{1}()
+CPB.add_af!(pf_dom, SVector(-1.0), 0.0)
+A = @SMatrix [0.5]
+b = @SVector [1.0]
+CPB.add_piece!(sys, pf_dom, 1, A, b, 1)
 
-mpf = MultiPolyFunc(2)
-afs_ = [([-1.0, 0.0], 1), ([1.0, 0.0], 1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 1, af_...)
-end
+mpf_inv = MultiPolyFunc{1,1}()
+CPB.add_af!(mpf_inv, 1, SVector(1.0), -1.0)
 
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
+mpf_BF = MultiPolyFunc{1,1}()
+CPB.add_af!(mpf_BF, 1, SVector(-1.0), 0.5)
 
-@testset "verify lie infeasible" begin
+mpf_safe = MultiPolyFunc{1,1}()
+
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_safe(verif, solver)
+
+@testset "verify safe: empty" begin
     @test r == -Inf
-    @test isempty(x)
+    @test x === SVector(NaN)
     @test loc == 0
 end
 
-## Lie false #1
-sys = System()
-domain = Polyhedron()
-A = [0.5 0.0; 1.0 1.0]
-b = [1, 0]
-CPB.add_piece!(sys, domain, 1, A, b, 1)
+mpf_safe = MultiPolyFunc{1,1}()
+CPB.add_af!(mpf_safe, 1, SVector(1.0), -0.25)
 
-mpf = MultiPolyFunc(2)
-afs_ = [([-1.0, 0.0], -1), ([1.0, 0.0], -1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 1, af_...)
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_safe(verif, solver)
+
+@testset "verify safe: infeasible" begin
+    @test r == -Inf
+    @test x === SVector(NaN)
+    @test loc == 0
 end
 
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
+mpf_safe = MultiPolyFunc{1,1}()
+CPB.add_af!(mpf_safe, 1, SVector(1.0), -1.0)
 
-@testset "verify lie false #1" begin
-    @test r ≈ 1/2
-    @test x[1] ≈ 1
-    @test x ∈ domain
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_safe(verif, solver)
+
+@testset "verify safe: unsafe" begin
+    @test r == 0.5
+    @test x === SVector(1.0)
     @test loc == 1
 end
 
-## Lie false #2
-sys = System()
-domain = Polyhedron()
-CPB.add_halfspace!(domain, [-1, 0], 0)
-A = [0.0 0.5; 0.5 0.1]
-b = [0, 1]
-CPB.add_piece!(sys, domain, 1, A, b, 1)
+# Set #2
+sys = System{2}()
+pf_dom = PolyFunc{2}()
+CPB.add_af!(pf_dom, SVector(-1.0, 0.0), -1.0)
+A = @SMatrix [0.0 1.0; -1.0 0.0]
+b = @SVector [0.0, 0.0]
+CPB.add_piece!(sys, pf_dom, 1, A, b, 2)
 
-mpf = MultiPolyFunc(2)
-afs_ = [([-1, 0], -1), ([1, 0], -1), ([0, -1], -1), ([0, 1], -1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 1, af_...)
+mpf_inv = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_inv, 1, SVector(0.0, 1.0), -1.0)
+
+mpf_BF = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_BF, 1, SVector(1.0, 0.0), -1.0)
+
+mpf_safe = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_safe, 1, SVector(0.0, -1.0), -1.0)
+
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_safe(verif, solver)
+
+@testset "verify safe: empty" begin
+    @test r == -Inf
+    @test x === SVector(NaN, NaN)
+    @test loc == 0
 end
 
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_BF(verif, solver)
 
-@testset "verify lie false #2" begin
-    @test r ≈ 0.6
-    @test x ≈ [1, 1]
-    @test x ∈ domain
+@testset "verify BF: empty" begin
+    @test r == -Inf
+    @test x === SVector(NaN, NaN)
+    @test loc == 0
+end
+
+mpf_BF = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_BF, 2, SVector(1.0, 0.0), -1.0)
+
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_BF(verif, solver)
+
+@testset "verify BF: satisfied" begin
+    @test r == 0.0
+    @test x[2] ≈ 1
     @test loc == 1
 end
 
-## Lie true #1
-sys = System()
-domain = Polyhedron()
-CPB.add_halfspace!(domain, [-1, 0], 0)
-A = [0.0 0.5; 0.5 0.1]
-b = [0.0, -0.5]
-CPB.add_piece!(sys, domain, 1, A, b, 1)
+pf_dom = PolyFunc{2}()
+CPB.add_af!(pf_dom, SVector(-1.0, 0.0), -1.0)
+A = @SMatrix [0.0 1.0; -1.0 0.0]
+b = @SVector [0.0, -1.0]
+CPB.add_piece!(sys, pf_dom, 1, A, b, 2)
 
-mpf = MultiPolyFunc(2)
-afs_ = [([-1, 0], -1), ([1, 0], -1), ([0, -1], -1), ([0, 1], -1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 1, af_...)
-end
+mpf_inv = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_inv, 1, SVector(1.0, 0.0), -2.0)
 
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
+mpf_BF = MultiPolyFunc{2,2}()
 
-@testset "verify lie false #2" begin
-    @test r ≈ -0.4
-    @test x ≈ [0, -1]
-    @test x ∈ domain
+mpf_safe = MultiPolyFunc{2,2}()
+CPB.add_af!(mpf_safe, 1, SVector(0.0, -1.0), -1.0)
+CPB.add_af!(mpf_safe, 2, SVector(0.0, -1.0), -1.0)
+
+verif = Verifier(mpf_safe, mpf_inv, mpf_BF, sys, xmax)
+x, r, loc = CPB.verify_safe(verif, solver)
+
+@testset "verify safe: unsafe" begin
+    @test r ≈ 2
+    @test x[1] ≈ 2
     @test loc == 1
-end
-
-## Lie multiple #1
-sys = System()
-domain = Polyhedron()
-CPB.add_halfspace!(domain, [-1, -1], -1)
-CPB.add_halfspace!(domain, [-1, 1], -1)
-A = [0.5 -0.25; 0.1 0.5]
-b = [0.0, 0.5]
-CPB.add_piece!(sys, domain, 2, A, b, 1)
-
-mpf = MultiPolyFunc(2)
-afs_ = [([1, 0], -1), ([0, -1], -1), ([0, 1], -1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 1, af_...)
-    CPB.add_af!(mpf, 2, af_...)
-end
-
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
-
-@testset "verify lie multiple #1" begin
-    @test r ≈ 0.1
-    @test x ≈ [1, 1]
-    @test x ∈ domain
-    @test loc == 2
-end
-
-mpf = MultiPolyFunc(2)
-afs_ = [([1, 0], -1), ([0, -1], -1), ([0, 1], -1)]
-for af_ in afs_
-    CPB.add_af!(mpf, 2, af_...)
-end
-CPB.add_af!(mpf, 1, afs_[1]...)
-
-x, r, loc = CPB.verify(mpf, sys, 1e3, solver)
-
-@testset "verify lie multiple #2" begin
-    @test r ≈ -0.25
-    @test x ≈ [1, -1]
-    @test x ∈ domain
-    @test loc == 2
 end
 
 nothing

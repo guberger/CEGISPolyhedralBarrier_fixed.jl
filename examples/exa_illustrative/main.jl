@@ -10,8 +10,7 @@ CPB = CEGISPolyhedralBarrier
 Polyhedron = CPB.Polyhedron
 PolyFunc = CPB.PolyFunc
 System = CPB.System
-InitialSet = CPB.InitialSet
-UnsafeSet = CPB.UnsafeSet
+PointSet = CPB.PointSet
 
 include("../utils/plotting2D.jl")
 
@@ -40,19 +39,17 @@ A = Matrix{Bool}(I, 2, 2)
 b = [0.0, 0.5]
 CPB.add_piece!(sys, domain ∩ box, 2, A, b, 1)
 
-iset = InitialSet{2}()
-init_points = ([-1, -1], [-1, 1], [1, -1], [1, 1])
-for point in init_points
+iset = PointSet{2}()
+in_points = ([-1, -1], [-1, 1], [1, -1], [1, 1])
+for point in in_points
     CPB.add_point!(iset, 1, point)
 end
 
-uset = UnsafeSet{2}()
-udom = Polyhedron()
-CPB.add_halfspace!(udom, [-1, 0], -2)
-CPB.add_halfspace!(udom, [1, 0], 1)
-CPB.add_halfspace!(udom, [0, -1], 1)
-CPB.add_halfspace!(udom, [0, 1], -2)
-CPB.add_domain!(uset, 2, udom)
+uset = PointSet{2}()
+ex_points = ([-2, 1], [-2, 2], [-1, 1], [-1, 2])
+for point in ex_points
+    CPB.add_point!(uset, 2, point)
+end
 
 # Illustration
 fig = figure(0, figsize=(15, 8))
@@ -78,26 +75,25 @@ for (loc, points) in enumerate(iset.points_list)
     for point in points
         plot_point!(ax_[loc], point, mc="gold")
     end
-    plot_vrep!(ax_[loc], points, fc="yellow", ec="yellow")
+    plot_chull!(ax_[loc], points, fc="yellow", ec="yellow")
 end
 
-for (loc, domains) in enumerate(uset.domains_list)
-    for domain in domains
-        plot_hrep!(
-            ax_[loc], domain.halfspaces, nothing, fc="red", ec="red"
-        )
+for (loc, points) in enumerate(uset.points_list)
+    for point in points
+        plot_point!(ax_[loc], point, mc="red")
     end
+    plot_chull!(ax_[loc], points, fc="red", ec="red")
 end
 
 for piece in sys.pieces
-    plot_hrep!(
+    plot_interior!(
         ax_[piece.loc1], piece.domain.halfspaces, nothing, fa=0.1
     )
 end
 
 ## Learner
 lear = CPB.Learner{2}((1, 1), sys, iset, uset)
-CPB.set_tol!(lear, :dom, 1e-8)
+CPB.set_tol!(lear, :domain, 1e-8)
 status, mpf, gen = CPB.learn_lyapunov!(
     lear, Inf, solver, solver, method=CPB.ObjMin()
 )

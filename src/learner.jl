@@ -43,33 +43,38 @@ min_obj(Q::PriorityQueue) = minimum(n->n.first[4], Q)
 struct Learner{N,M}
     nafs::NTuple{M,Int}
     sys::System
-    iset::PointSet{M}
-    uset::PointSet{M}
+    mpf_safe::MultiPolyFunc{N,M}
+    mpf_inv::MultiPolyFunc{N,M}
+    iset::PointSet{N,M}
     tols::Dict{Symbol,Float64}
     params::Dict{Symbol,Float64}
 end
 
-function Learner{N}(nafs, sys, iset, uset) where N
+function Learner(nafs, sys, mpf_safe, mpf_inv, iset)
     tols = Dict([
-        :radius => eps(1.0),
+        :rad => eps(1.0),
         :verif => -eps(1.0),
-        :domain => eps(1.0)
+        :dom => eps(1.0)
     ])
     params = Dict([
         :xmax => 1e3,
     ])
-    return Learner{N,length(nafs)}(nafs, sys, iset, uset, tols, params)
+    return Learner(nafs, sys, mpf_safe, mpf_inv, iset, tols, params)
 end
 
 _setsafe!(D, k, v) = (@assert haskey(D, k); D[k] = v)
 set_tol!(lear::Learner, s::Symbol, v) = _setsafe!(lear.tols, s, v)
 set_param!(lear::Learner, s::Symbol, v) = _setsafe!(lear.params, s, v)
 
-function _add_images!(images_list, sys, loc1, point1, tol_domain)
-    for piece in sys.pieces
-        loc1 != piece.loc1 && continue
-        !near(point1, piece.domain, tol_domain) && continue
-        push!(images_list[piece.loc2], piece.A*point1 + piece.b)
+function compute_post!(set2, set1, sys, tol_dom)
+    for (loc1, points) in enumerate(set1.points_list)
+        for piece in sys.pieces
+            loc1 != piece.loc1 && continue
+            for point in points
+                !_neg(piece.pf_dom, point, tol_dom) && continue
+                add_point!(set2, piece.loc2, piece.A*point + piece.b)
+            end
+        end
     end
 end
 
@@ -86,17 +91,11 @@ function learn_lyapunov!(
         PR="full", method::TreeExploreMethod=Depth1st()
     ) where {N,M}
     @assert iter_max ≥ 1
-    nafs_ = lear.nafs .+ 1
 
-    gen = Generator{N}(nafs_)
+    gen = Generator{N}(lear.nafs)
     for (loc, points) in enumerate(lear.iset.points_list)
         for point in points
-            add_evidence!(gen, InEvidence(loc, Point{N}(point)))
-        end
-    end
-    for (loc, points) in enumerate(lear.uset.points_list)
-        for point in points
-            add_evidence!(gen, ExEvidence(loc, nafs_[loc], Point{N}(point)))
+            add_evidence!(gen, NegEvidence(loc, point))
         end
     end
     node_queue = _make_queue(method, typeof(gen))
@@ -104,9 +103,14 @@ function learn_lyapunov!(
 
     iter = 0
     xmax = lear.params[:xmax]
-    tol_domain = lear.tols[:domain]
-    mpf::MultiPolyFunc = MultiPolyFunc(0) # never used
-    images_list = ntuple(i -> Vector{Float64}[], Val(M))
+    tol_dom = lear.tols[:dom]
+    mpf::MultiPolyFunc = MultiPolyFunc(map(
+        naf -> PolyFunc([
+            AffForm(SVector(ntuple(k -> NaN, Val(N))), NaN) for i = 1:naf
+        ]), lear.nafs
+    )) # never used
+    set1 = PointSet{N,M}()
+    set2 = PointSet{N,M}()
 
     while true
         if isempty(node_queue)
@@ -132,38 +136,45 @@ function learn_lyapunov!(
         _pr_full(PR) && print("|--- depth: ", depth)
         mpf, r = compute_mpf_robust(gen, solver_gen)
         _pr_full(PR) && println(", rad: ", r)
-        if r < lear.tols[:radius]
+        if r < lear.tols[:rad]
             _pr_full(PR) && println("Radius too small: ", r)
             continue
         end
+
         depth2 = depth + 1
+        verif = Verifier(lear.mpf_safe, lear.mpf_inv, mpf, lear.sys, xmax)
 
         # Verifier
-        _pr_full(PR) && print("|--- verify... ")
-        x, obj, loc = verify(mpf, lear.sys, xmax, solver_verif)
+        _pr_full(PR) && print("|--- verify safe... ")
+        x, obj, loc = verify_safe(verif, solver_verif)
         if obj > lear.tols[:verif]
             _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
-            point = Point{N}(x)
-            α = norm(point, Inf) + 1
             for i = 1:lear.nafs[loc]
-                gen2 = Generator(
-                    nafs_, gen.in_evids, gen.ex_evids,
-                    gen.neg_evids, copy(gen.pos_evids)
-                )
-                add_evidence!(gen2, PosEvidence(loc, i, point, α))
+                gen2 = Generator(lear.nafs, gen.neg_evids, copy(gen.pos_evids))
+                add_evidence!(gen2, PosEvidence(loc, i, x))
                 _enqueue!(method, node_queue, (gen2, depth2, r, obj))
             end
-            gen2 = Generator(
-                nafs_, gen.in_evids, gen.ex_evids,
-                copy(gen.neg_evids), gen.pos_evids
-            )
-            empty!.(images_list)
-            _add_images!(images_list, lear.sys, loc, x, tol_domain)
-            for (loc, images) in enumerate(images_list)
-                for x in images
-                    point = Point{N}(x)
-                    α = norm(point, Inf) + 1
-                    add_evidence!(gen2, NegEvidence(loc, point, α))
+            continue
+        else
+            _pr_full(PR) && println("No CE found: ", obj)
+        end
+        _pr_full(PR) && print("|--- verify BF... ")
+        x, obj, loc = verify_BF(verif, solver_verif)
+        if obj > lear.tols[:verif]
+            _pr_full(PR) && println("CE found: ", x, ", ", loc, ", ", obj)
+            for i = 1:lear.nafs[loc]
+                gen2 = Generator(lear.nafs, gen.neg_evids, copy(gen.pos_evids))
+                add_evidence!(gen2, PosEvidence(loc, i, x))
+                _enqueue!(method, node_queue, (gen2, depth2, r, obj))
+            end
+            empty!(set1)
+            empty!(set2)
+            add_point!(set1, loc, x)
+            compute_post!(set2, set1, lear.sys, tol_dom)
+            gen2 = Generator(lear.nafs, copy(gen.neg_evids), gen.pos_evids)
+            for (loc, points) in enumerate(set2.points_list)
+                for point in points
+                    add_evidence!(gen2, NegEvidence(loc, point))
                 end
             end
             _enqueue!(method, node_queue, (gen2, depth2, r, obj))
@@ -172,7 +183,6 @@ function learn_lyapunov!(
             _pr_full(PR) && println("No CE found: ", obj)
         end
         
-        !_pr_none(PR) && println("No CE found")
         !_pr_none(PR) && println("Valid CLF: terminated")
         return BARRIER_FOUND, mpf, gen
     end

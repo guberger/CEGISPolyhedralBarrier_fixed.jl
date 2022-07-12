@@ -20,6 +20,8 @@ solver() = Model(optimizer_with_attributes(
     () -> Gurobi.Optimizer(GUROBI_ENV), "OutputFlag"=>false
 ))
 
+_EYE_ = SMatrix{2,2}(1.0*I)
+
 mpf_inv = MultiPolyFunc{2,1}()
 CPB.add_af!(mpf_inv, 1, SVector(-1.0, 0.0), -20.0)
 CPB.add_af!(mpf_inv, 1, SVector(1.0, 0.0), -20.0)
@@ -30,35 +32,31 @@ sys = System{2}()
 
 pf_dom = PolyFunc{2}()
 CPB.add_af!(pf_dom, SVector(1.0, 0.0), -4.0)
-A = @SMatrix [1.0 0.0; 0.0 1.0]
-b = @SVector [3.0, 1.0]
-CPB.add_piece!(sys, pf_dom, 1, A, b, 1)
+b = @SVector [1.0, 2.0]
+CPB.add_piece!(sys, pf_dom, 1, _EYE_, b, 1)
 
 pf_dom = PolyFunc{2}()
 CPB.add_af!(pf_dom, SVector(-1.0, 0.0), 5.0)
 CPB.add_af!(pf_dom, SVector(1.0, 0.0), -7.0)
-A = @SMatrix [1.0 0.0; 0.0 1.0]
 b = @SVector [2.0, 1.0]
-CPB.add_piece!(sys, pf_dom, 1, A, b, 1)
+CPB.add_piece!(sys, pf_dom, 1, _EYE_, b, 1)
 
 pf_dom = PolyFunc{2}()
 CPB.add_af!(pf_dom, SVector(-1.0, 0.0), 7.0)
 CPB.add_af!(pf_dom, SVector(1.0, 0.0), -9.0)
-A = @SMatrix [1.0 0.0; 0.0 1.0]
-b = @SVector [1.0, 1.0]
-CPB.add_piece!(sys, pf_dom, 1, A, b, 1)
+b = @SVector [1.0, 3.0]
+CPB.add_piece!(sys, pf_dom, 1, _EYE_, b, 1)
 
 pf_dom = PolyFunc{2}()
 CPB.add_af!(pf_dom, SVector(-1.0, 0.0), 9.0)
-A = @SMatrix [1.0 0.0; 0.0 1.0]
-b = @SVector [1.0, 2.0]
-CPB.add_piece!(sys, pf_dom, 1, A, b, 1)
+b = @SVector [2.0, 1.0]
+CPB.add_piece!(sys, pf_dom, 1, _EYE_, b, 1)
 
 iset = PointSet{2,1}()
 CPB.add_point!(iset, 1, SVector(0.0, 0.0))
 
 mpf_safe = MultiPolyFunc{2,1}()
-CPB.add_af!(mpf_safe, 1, SVector(2.0, -1.1), -15.4)
+CPB.add_af!(mpf_safe, 1, SVector(1.0, -2.1), -0.1)
 
 # Illustration
 fig = figure(0, figsize=(10, 8))
@@ -99,7 +97,7 @@ end
 lear = CPB.Learner((2,), sys, mpf_safe, mpf_inv, iset)
 CPB.set_tol!(lear, :dom, 1e-8)
 status, mpf, gen = CPB.learn_lyapunov!(
-    lear, Inf, solver, solver, PR=1, method=CPB.DepthMin()
+    lear, Inf, solver, solver, PR=100, method=CPB.DepthMin()
 )
 
 display(status)

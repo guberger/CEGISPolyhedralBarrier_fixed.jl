@@ -42,7 +42,7 @@ min_obj(Q::PriorityQueue) = minimum(n->n.first[4], Q)
 
 struct Learner{N,M}
     nafs::NTuple{M,Int}
-    sys::System
+    sys::System{N}
     mpf_safe::MultiPolyFunc{N,M}
     mpf_inv::MultiPolyFunc{N,M}
     iset::PointSet{N,M}

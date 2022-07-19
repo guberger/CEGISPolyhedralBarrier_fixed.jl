@@ -13,7 +13,7 @@ Generator = CPB.Generator
 NegEvidence = CPB.NegEvidence
 PosEvidence = CPB.PosEvidence
 PolyFunc = CPB.PolyFunc
-_norm(pf::PolyFunc) = maximum(af -> max(norm(af.a, Inf), af.β), pf.afs)
+_norm(pf::PolyFunc) = maximum(af -> max(norm(af.a, Inf), abs(af.β)), pf.afs)
 
 solver() = Model(optimizer_with_attributes(
     HiGHS.Optimizer, "output_flag"=>false
